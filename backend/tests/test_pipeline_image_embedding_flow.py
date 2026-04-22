@@ -90,6 +90,24 @@ class PipelineImageEmbeddingFlowTests(unittest.TestCase):
         self.assertEqual(mocked_detect.call_count, 1)
         self.assertEqual(mocked_detect.call_args.kwargs["detection_mode"], "expensive")
 
+    def test_cancelled_pipeline_skips_model_work_and_persistence(self) -> None:
+        with patch("app.db.supabase.get_supabase", side_effect=Exception("disabled")), \
+             patch("app.services.pipeline.build_content_hash") as mocked_hash, \
+             patch("app.services.pipeline.generate_image_embedding") as mocked_embedding, \
+             patch("app.services.pipeline.save_index_record") as mocked_save_index_record, \
+             patch("app.services.pipeline.os.path.exists", return_value=False):
+            pipeline.process_image(
+                image_path="ignored.jpg",
+                user_id="user-1",
+                photo_id="photo-1",
+                image_uuid="image-1",
+                is_cancelled=lambda: True,
+            )
+
+        mocked_hash.assert_not_called()
+        mocked_embedding.assert_not_called()
+        mocked_save_index_record.assert_not_called()
+
     def test_process_image_upserts_face_cluster_centroid_to_supabase(self) -> None:
         fake_supabase = _FakeSupabase()
         face_records = [

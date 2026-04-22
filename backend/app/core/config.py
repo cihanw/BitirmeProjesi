@@ -21,6 +21,8 @@ class Settings(BaseSettings):
 
     # Phase 7 — AI / GenAI
     OPENAI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_IMAGE_MODEL: str = "gemini-3.1-flash-image-preview"
     AI_RATE_LIMIT_PER_HOUR: int = 10
 
     model_config = SettingsConfigDict(
@@ -30,7 +32,8 @@ class Settings(BaseSettings):
     )
 
     @field_validator(
-        "SUPABASE_URL", "SUPABASE_KEY", "JWT_SECRET", "QDRANT_HOST", "OPENAI_API_KEY",
+        "SUPABASE_URL", "SUPABASE_KEY", "JWT_SECRET", "QDRANT_HOST",
+        "OPENAI_API_KEY", "GEMINI_API_KEY", "GEMINI_IMAGE_MODEL",
         mode="before",
     )
     @classmethod

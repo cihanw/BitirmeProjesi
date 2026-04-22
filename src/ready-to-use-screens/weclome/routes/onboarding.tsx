@@ -22,7 +22,7 @@ import Carousel from "../components/carousel";
 import { OnboardingSlide } from "../components/lib/types";
 import { trackEvent } from '@/src/mixpanel';
 import { supabase } from "@/lib/supabase";
-import { appleAuth } from '@invertase/react-native-apple-authentication';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import type { SignInWithIdTokenCredentials } from '@supabase/supabase-js';
 
 // superlist-onboarding-flow-animation 🔽
@@ -263,18 +263,19 @@ export const Onboarding = () => {
     trackEvent('onboarding_apple_sign_in');
 
     try {
-      const appleAuthRequestResponse = await appleAuth.performRequest({
-        requestedOperation: appleAuth.Operation.LOGIN,
-        requestedScopes: [appleAuth.Scope.FULL_NAME, appleAuth.Scope.EMAIL],
+      const appleAuthRequestResponse = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
       });
 
-      const { identityToken, nonce } = appleAuthRequestResponse;
+      const { identityToken } = appleAuthRequestResponse;
       if (!identityToken) throw new Error('No identity token returned.');
 
       const signInCredentials: SignInWithIdTokenCredentials = {
         provider: 'apple',
         token: identityToken,
-        nonce,
       };
 
       // This call updates the Supabase session globally

@@ -17,5 +17,5 @@ opencv-python-headless>=4.10.0.84
 insightface>=0.7.3
 onnxruntime>=1.17.0
 
-# GenAI image editing
+# GenAI image editing via OpenAI gpt-image-1
 openai>=1.30.0

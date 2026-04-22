@@ -11,7 +11,8 @@ from insightface.app import FaceAnalysis
 MODEL_NAME = "buffalo_l"
 DEFAULT_DET_THRESH = 0.5
 DEFAULT_DET_SIZE = (640, 640)
-EXPENSIVE_FACE_SCORE_THRESHOLD = 0.40
+EXPENSIVE_FACE_SCORE_THRESHOLD = 0.65
+MIN_PEOPLE_ALBUM_FACE_EDGE_PIXELS = 32.0
 HARD_PORTRAIT_DET_SIZE = (1280, 1280)
 HARD_PORTRAIT_DET_THRESH = 0.20
 HARD_PORTRAIT_CROP_RATIO = 0.85
@@ -22,6 +23,7 @@ EXPENSIVE_FACE_ATTEMPT = {
     "det_size": DEFAULT_DET_SIZE,
     "det_thresh": EXPENSIVE_FACE_SCORE_THRESHOLD,
     "min_face_score": EXPENSIVE_FACE_SCORE_THRESHOLD,
+    "min_face_box_edge": MIN_PEOPLE_ALBUM_FACE_EDGE_PIXELS,
     "target_max_edge": None,
     "target_min_edge": None,
 }
@@ -290,6 +292,7 @@ def run_detection_attempt(
     target_min_edge: int | None = None,
     crop_ratio: float | None = None,
     rotation_angle: float | None = None,
+    min_face_box_edge: float = 0.0,
 ) -> list[dict[str, Any]]:
     processed_img, forward_matrix = prepare_detection_image(
         img,
@@ -314,6 +317,11 @@ def run_detection_attempt(
             original_width=original_width,
             original_height=original_height,
         )
+        face_width = remapped_bbox[2] - remapped_bbox[0]
+        face_height = remapped_bbox[3] - remapped_bbox[1]
+        if min(face_width, face_height) < min_face_box_edge:
+            continue
+
         results.append(
             {
                 "bbox": remapped_bbox,
@@ -369,6 +377,7 @@ def detect_faces_in_image(
             target_min_edge=attempt.get("target_min_edge"),
             crop_ratio=attempt.get("crop_ratio"),
             rotation_angle=attempt.get("rotation_angle"),
+            min_face_box_edge=attempt.get("min_face_box_edge", 0.0),
         )
         if faces:
             return DetectionAttemptResult(faces=faces, attempt_label=attempt["label"])

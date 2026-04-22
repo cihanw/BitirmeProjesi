@@ -102,12 +102,11 @@ async def ai_edit(
     authorization: str | None = Header(default=None),
 ) -> EditResponse:
     """
-    Edit a photo with AI using DALL-E 2 image editing.
+    Edit a photo with AI using OpenAI gpt-image-1.
 
     The client sends the current photo as a base64 data-URI together with
-    a natural-language editing instruction.  The backend converts it to a
-    square RGBA PNG, calls DALL-E 2 /images/edits, and returns the CDN URL
-    of the generated result.
+    a natural-language editing instruction. The backend forwards the image
+    and prompt to OpenAI, then returns the generated image as a data URI.
     """
     if not settings.OPENAI_API_KEY:
         raise HTTPException(
@@ -140,12 +139,12 @@ async def ai_edit(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         error_msg = str(exc)
-        if "insufficient_quota" in error_msg or "billing" in error_msg.lower():
+        if "quota" in error_msg.lower() or "billing" in error_msg.lower() or "insufficient_quota" in error_msg.lower():
             raise HTTPException(
                 status_code=402,
                 detail="OpenAI quota exceeded. Please check your billing settings.",
             ) from exc
-        if "content_policy" in error_msg or "safety" in error_msg.lower():
+        if "content_policy" in error_msg or "safety" in error_msg.lower() or "prohibited" in error_msg.lower():
             raise HTTPException(
                 status_code=400,
                 detail="Your prompt was rejected by the content safety filter. Try a different instruction.",

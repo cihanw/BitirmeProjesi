@@ -39,6 +39,32 @@ class FaceServiceGeometryTests(unittest.TestCase):
         self.assertEqual(len(accepted_faces), 1)
         self.assertAlmostEqual(float(accepted_faces[0]["score"]), 0.60, delta=1e-6)
 
+    def test_min_face_box_edge_filters_tiny_detections(self) -> None:
+        class DummyFace:
+            def __init__(self, bbox: list[float]) -> None:
+                self.bbox = np.array(bbox, dtype=np.float32)
+                self.embedding = np.array([0.1, 0.2], dtype=np.float32)
+                self.det_score = 0.95
+
+        class DummyModel:
+            def get(self, _img: np.ndarray) -> list[DummyFace]:
+                return [
+                    DummyFace([5.0, 5.0, 20.0, 24.0]),
+                    DummyFace([40.0, 40.0, 90.0, 92.0]),
+                ]
+
+        with patch("app.services.face_service.get_face_model", return_value=DummyModel()):
+            filtered_faces = face_service.run_detection_attempt(
+                np.zeros((128, 128, 3), dtype=np.uint8),
+                det_size=(640, 640),
+                det_thresh=0.5,
+                min_face_score=0.70,
+                min_face_box_edge=32.0,
+            )
+
+        self.assertEqual(len(filtered_faces), 1)
+        self.assertEqual(filtered_faces[0]["bbox"], [40.0, 40.0, 90.0, 92.0])
+
     def test_center_crop_bbox_maps_back_to_original_coordinates(self) -> None:
         original = np.zeros((1000, 800, 3), dtype=np.uint8)
         original_bbox = [250.0, 200.0, 550.0, 700.0]
@@ -149,8 +175,9 @@ class FaceServiceGeometryTests(unittest.TestCase):
         self.assertEqual(result.faces, [])
         self.assertEqual(mocked_attempt.call_count, 1)
         self.assertEqual(mocked_attempt.call_args.kwargs["det_size"], (640, 640))
-        self.assertEqual(mocked_attempt.call_args.kwargs["det_thresh"], 0.40)
-        self.assertEqual(mocked_attempt.call_args.kwargs["min_face_score"], 0.40)
+        self.assertEqual(mocked_attempt.call_args.kwargs["det_thresh"], 0.65)
+        self.assertEqual(mocked_attempt.call_args.kwargs["min_face_score"], 0.65)
+        self.assertEqual(mocked_attempt.call_args.kwargs["min_face_box_edge"], 32.0)
         self.assertIsNone(mocked_attempt.call_args.kwargs.get("target_max_edge"))
         self.assertIsNone(mocked_attempt.call_args.kwargs.get("target_min_edge"))
         self.assertIsNone(mocked_attempt.call_args.kwargs.get("crop_ratio"))

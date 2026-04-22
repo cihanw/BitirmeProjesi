@@ -7,9 +7,33 @@ const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+const SUPABASE_AUTH_STORAGE_KEY = 'sb-auth-token';
+
 export const supabaseConfigError = new Error(
     'Supabase env vars are missing. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.'
 );
+
+export function isInvalidRefreshTokenError(error: unknown): boolean {
+    if (!error) return false;
+    const message =
+        error instanceof Error
+            ? error.message
+            : typeof error === 'object' && error !== null && 'message' in error
+                ? String(error.message)
+                : String(error);
+
+    return message.toLowerCase().includes('invalid refresh token');
+}
+
+export async function clearSupabaseAuthStorage() {
+    if (Platform.OS === 'web') return;
+
+    await AsyncStorage.multiRemove([
+        SUPABASE_AUTH_STORAGE_KEY,
+        `${SUPABASE_AUTH_STORAGE_KEY}-code-verifier`,
+        `${SUPABASE_AUTH_STORAGE_KEY}-user`,
+    ]);
+}
 
 function createFallbackSupabaseClient() {
     const queryBuilder = {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -94,6 +95,68 @@ class PeopleServiceClusteringTests(unittest.TestCase):
         self.assertEqual(payload["sample_count"], 4)
         self.assertEqual(payload["cover_image_uuid"], "image-1")
         self.assertEqual(payload["cover_photo_id"], "photo-1")
+
+    def test_local_people_list_hides_tiny_single_face_clusters(self) -> None:
+        store = {
+            "clusters": [
+                {
+                    "id": "tiny-cluster",
+                    "user_id": "user-1",
+                    "name": "Tiny",
+                    "centroid": [1.0, 0.0],
+                    "sample_count": 1,
+                },
+                {
+                    "id": "usable-cluster",
+                    "user_id": "user-1",
+                    "name": "Usable",
+                    "centroid": [0.0, 1.0],
+                    "sample_count": 1,
+                },
+            ],
+            "detections": [
+                {
+                    "id": "tiny-detection",
+                    "user_id": "user-1",
+                    "cluster_id": "tiny-cluster",
+                    "image_uuid": "image-1",
+                    "photo_id": "photo-1",
+                    "bounding_box": [10.0, 10.0, 28.0, 29.0],
+                },
+                {
+                    "id": "usable-detection",
+                    "user_id": "user-1",
+                    "cluster_id": "usable-cluster",
+                    "image_uuid": "image-2",
+                    "photo_id": "photo-2",
+                    "bounding_box": [10.0, 10.0, 60.0, 62.0],
+                },
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store_path = Path(tmp_dir) / "people.json"
+            store_path.write_text(json.dumps(store), encoding="utf-8")
+
+            with patch.object(people_service, "PEOPLE_STORE_PATH", store_path), \
+                 patch(
+                     "app.services.people_service.get_index_records_for_user",
+                     return_value=[
+                         {
+                             "uuid": "image-1",
+                             "photo_id": "photo-1",
+                             "persons": ["Tiny"],
+                         },
+                         {
+                             "uuid": "image-2",
+                             "photo_id": "photo-2",
+                             "persons": ["Usable"],
+                         },
+                     ],
+                 ):
+                clusters = people_service._fetch_clusters_from_local_store("user-1")
+
+        self.assertEqual([cluster["id"] for cluster in clusters], ["usable-cluster"])
 
 
 if __name__ == "__main__":

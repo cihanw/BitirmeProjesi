@@ -50,6 +50,15 @@ def get_index_records_for_user(user_id: str) -> list[dict[str, Any]]:
         ]
 
 
+def get_index_record_for_photo(user_id: str, photo_id: str) -> dict[str, Any] | None:
+    with _LOCK:
+        for item in _read_store():
+            if item.get("user_id") == user_id and item.get("photo_id") == photo_id:
+                return item
+
+    return None
+
+
 def get_all_index_records() -> list[dict[str, Any]]:
     with _LOCK:
         return _read_store()

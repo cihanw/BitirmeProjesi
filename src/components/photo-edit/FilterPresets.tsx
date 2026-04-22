@@ -12,7 +12,7 @@ import {
     cool,
     kodachrome,
     vintage,
-} from 'react-native-color-matrix-image-filters';
+} from '@/src/lib/color-matrix-filters';
 
 export type FilterPreset = 'original' | 'bw' | 'sepia' | 'vivid' | 'warm' | 'cool' | 'kodachrome' | 'vintage';
 

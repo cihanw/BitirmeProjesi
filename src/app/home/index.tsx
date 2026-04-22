@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import NetInfo from '@react-native-community/netinfo';
 import {
     ActivityIndicator,
     Keyboard,
@@ -33,7 +34,15 @@ export default function HomePage() {
     const [isClearingLocalCache, setIsClearingLocalCache] = useState(false);
     const [searchHint, setSearchHint] = useState<string | null>(null);
     const [recentSearches, setRecentSearches] = useState<string[]>([]);
+    const [isOffline, setIsOffline] = useState(false);
     const isSearchMode = submittedQuery.length > 0;
+
+    useEffect(() => {
+        const unsubscribe = NetInfo.addEventListener((state) => {
+            setIsOffline(!(state.isConnected && state.isInternetReachable !== false));
+        });
+        return unsubscribe;
+    }, []);
 
     useEffect(() => {
         listRecentSearchQueries()
@@ -133,6 +142,12 @@ export default function HomePage() {
                     </TouchableOpacity>
                 </View>
             </View>
+
+            {isOffline && (
+                <View style={styles.offlineStrip}>
+                    <Text style={styles.offlineText}>📵 Offline moddasınız</Text>
+                </View>
+            )}
 
             <View style={styles.searchShell}>
                 <View style={styles.searchBar}>
@@ -376,6 +391,20 @@ const styles = StyleSheet.create({
         color: '#3730a3',
         fontSize: 12,
         fontWeight: '700',
+    },
+    offlineStrip: {
+        marginHorizontal: 16,
+        marginBottom: 8,
+        borderRadius: 10,
+        backgroundColor: '#fef3c7',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        alignItems: 'center',
+    },
+    offlineText: {
+        color: '#92400e',
+        fontSize: 12,
+        fontWeight: '600',
     },
     gallery: { flex: 1 },
     center: {

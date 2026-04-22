@@ -15,12 +15,19 @@ type UploadFileForSearchParams = {
     creationTime?: number;
 };
 
+type FetchUploadWithRetryParams = UploadFileForSearchParams & {
+    baseUrl: string;
+    accessToken?: string;
+};
+
 type UploadSearchablePhotoResponse = {
     imageUuid: string;
     photoId: string;
 };
 
 export const DUPLICATE_SMART_GALLERY_PHOTO = 'duplicate_smart_gallery_photo';
+const NETWORK_UPLOAD_MAX_ATTEMPTS = 3;
+const NETWORK_UPLOAD_RETRY_DELAYS_MS = [400, 900];
 
 function stableHash(value: string): string {
     let hash = 5381;
@@ -66,6 +73,66 @@ function inferMimeType(filename?: string | null): string {
     return 'image/jpeg';
 }
 
+function isNetworkRequestFailed(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+
+    return error.message.trim().toLowerCase() === 'network request failed';
+}
+
+function wait(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildUploadFormData({
+    sourceId,
+    fileUri,
+    filename,
+    creationTime,
+}: UploadFileForSearchParams): FormData {
+    const formData = new FormData();
+    formData.append('photo_id', sourceId);
+
+    if (creationTime) {
+        formData.append('captured_at', new Date(creationTime).toISOString());
+    }
+
+    formData.append('file', {
+        uri: fileUri,
+        name: filename ?? `${sourceId}.jpg`,
+        type: inferMimeType(filename),
+    } as any);
+
+    return formData;
+}
+
+async function fetchUploadWithNetworkRetry(params: FetchUploadWithRetryParams): Promise<Response> {
+    for (let attempt = 1; attempt <= NETWORK_UPLOAD_MAX_ATTEMPTS; attempt += 1) {
+        try {
+            return await fetch(`${params.baseUrl}/api/upload`, {
+                method: 'POST',
+                headers: {
+                    ...(params.accessToken
+                        ? { Authorization: `Bearer ${params.accessToken}` }
+                        : {}),
+                },
+                body: buildUploadFormData(params),
+            });
+        } catch (error) {
+            const shouldRetry =
+                isNetworkRequestFailed(error) &&
+                attempt < NETWORK_UPLOAD_MAX_ATTEMPTS;
+
+            if (!shouldRetry) {
+                throw error;
+            }
+
+            await wait(NETWORK_UPLOAD_RETRY_DELAYS_MS[attempt - 1] ?? 900);
+        }
+    }
+
+    throw new Error('Network request failed');
+}
+
 export async function uploadSearchablePhoto({
     assetId,
     asset,
@@ -103,25 +170,13 @@ export async function uploadFileForSearch({
         accessToken = undefined;
     }
 
-    const formData = new FormData();
-    formData.append('photo_id', sourceId);
-
-    if (creationTime) {
-        formData.append('captured_at', new Date(creationTime).toISOString());
-    }
-
-    formData.append('file', {
-        uri: fileUri,
-        name: filename ?? `${sourceId}.jpg`,
-        type: inferMimeType(filename),
-    } as any);
-
-    const response = await fetch(`${baseUrl}/api/upload`, {
-        method: 'POST',
-        headers: {
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-        body: formData,
+    const response = await fetchUploadWithNetworkRetry({
+        baseUrl,
+        accessToken,
+        sourceId,
+        fileUri,
+        filename,
+        creationTime,
     });
 
     const payload = await response.json().catch(() => ({}));

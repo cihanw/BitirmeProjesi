@@ -93,7 +93,7 @@ export async function editPhotoWithAI(
     throw new AIError('You must be logged in to use AI editing.', 'unauthorized');
   }
   if (response.status === 402) {
-    throw new AIError('OpenAI quota exceeded. Please check the server billing settings.', 'quota_exceeded');
+    throw new AIError('Gemini quota exceeded. Please check the server billing settings.', 'quota_exceeded');
   }
   if (response.status === 429) {
     const inner = typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>) : {};

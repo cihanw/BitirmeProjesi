@@ -32,7 +32,7 @@ def health_check():
         "status": "online",
         "supabase_configured": bool(settings and settings.SUPABASE_URL),
         "qdrant_configured": bool(settings and settings.QDRANT_HOST),
-        "openai_configured": bool(settings and settings.OPENAI_API_KEY),
+        "gemini_configured": bool(settings and settings.GEMINI_API_KEY),
         "dev_bypass_auth": bool(settings and settings.DEV_BYPASS_AUTH),
     }
 

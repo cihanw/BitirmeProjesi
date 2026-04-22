@@ -1,6 +1,11 @@
 // src/providers/auth-provider.tsx
 import { AuthContext } from '@/src/hooks/auth-hooks';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import {
+    clearSupabaseAuthStorage,
+    isInvalidRefreshTokenError,
+    isSupabaseConfigured,
+    supabase
+} from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 import { PropsWithChildren, useEffect, useState, useCallback } from 'react';
 import type { Profile } from '@/src/types/user.type';
@@ -79,14 +84,20 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                 } = await supabase.auth.getSession();
 
                 if (error) {
-                    console.error('Error fetching session:', error);
+                    if (isInvalidRefreshTokenError(error)) {
+                        await clearSupabaseAuthStorage();
+                        console.warn('Cleared stale Supabase auth session from local storage.');
+                    } else {
+                        console.warn('Error fetching session:', error);
+                    }
                 }
 
                 if (isMounted) {
-                    setSession(currentSession);
+                    const nextSession = error ? null : currentSession;
+                    setSession(nextSession);
 
-                    if (currentSession?.user) {
-                        await fetchProfile(currentSession.user.id);
+                    if (nextSession?.user) {
+                        await fetchProfile(nextSession.user.id);
                     } else {
                         setProfile(null);
                     }
@@ -95,8 +106,15 @@ export default function AuthProvider({ children }: PropsWithChildren) {
                     setIsInitialized(true);
                 }
             } catch (error) {
-                console.error('Error in initializeAuth:', error);
+                if (isInvalidRefreshTokenError(error)) {
+                    await clearSupabaseAuthStorage();
+                    console.warn('Cleared stale Supabase auth session from local storage.');
+                } else {
+                    console.warn('Error in initializeAuth:', error);
+                }
                 if (isMounted) {
+                    setSession(null);
+                    setProfile(null);
                     setIsLoading(false);
                     setIsInitialized(true);
                 }

@@ -1,9 +1,9 @@
 """
-ai_service.py — Phase 7: OpenAI-powered GenAI service.
+ai_service.py - OpenAI gpt-image-1 powered GenAI service.
 
 Modes:
-  • edit_image  → DALL-E 2 /images/edits, takes existing photo + instruction prompt,
-                  returns URL of the AI-edited image.
+  * edit_image -> OpenAI image edit, takes an existing photo plus an
+                  instruction prompt, and returns an edited image data URI.
 
 Rate limiting: simple in-memory rolling-hour bucket per user_id.
 """
@@ -57,37 +57,24 @@ def get_credits_remaining(user_id: str) -> int:
 
 
 # ---------------------------------------------------------------------------
-# OpenAI client (lazy-loaded)
+# OpenAI gpt-image-1 image editing
 # ---------------------------------------------------------------------------
 
-def _get_openai_client() -> Any:
-    try:
-        from openai import OpenAI  # type: ignore[import]
-    except ImportError as exc:
-        raise RuntimeError(
-            "openai package is not installed. Run: pip install openai"
-        ) from exc
+def _get_openai_client():  # type: ignore[return]
+    """Return an initialised OpenAI client or raise RuntimeError."""
+    from openai import OpenAI  # local import — only needed when this function runs
 
     api_key = settings.OPENAI_API_KEY
     if not api_key:
         raise RuntimeError(
             "OPENAI_API_KEY is not set. Add it to .env and restart the server."
         )
-
     return OpenAI(api_key=api_key)
 
 
-# ---------------------------------------------------------------------------
-# Image editing via DALL-E 2
-# ---------------------------------------------------------------------------
-
 def edit_image(prompt: str, image_b64: str) -> dict[str, Any]:
     """
-    Send a photo + editing instruction to gpt-image-1 /images/edits.
-
-    gpt-image-1 performs true instruction-based editing — it actually
-    modifies the original photo rather than generating a new image from
-    scratch (DALL-E 2 limitation without a mask).
+    Send a photo + editing instruction to OpenAI gpt-image-1.
 
     Returns:
         {
@@ -95,35 +82,30 @@ def edit_image(prompt: str, image_b64: str) -> dict[str, Any]:
             "b64": str,   # data-URI: data:image/png;base64,...
         }
     """
-    try:
-        from PIL import Image  # type: ignore[import]
-    except ImportError as exc:
-        raise RuntimeError(
-            "Pillow is not installed. Run: pip install Pillow"
-        ) from exc
-
     client = _get_openai_client()
 
-    # Decode base64 → PIL Image → PNG bytes
-    raw_bytes = base64.b64decode(image_b64)
-    img = Image.open(io.BytesIO(raw_bytes))
+    # Decode the raw base64 → bytes → in-memory PNG file object
+    image_bytes = base64.b64decode(image_b64)
+    image_file = io.BytesIO(image_bytes)
+    image_file.name = "photo.png"  # OpenAI SDK reads the .name attribute for mime detection
 
-    # gpt-image-1 accepts PNG, JPEG, WebP — keep as PNG for lossless quality
-    png_buf = io.BytesIO()
-    img.save(png_buf, format="PNG")
-    png_buf.seek(0)
-    png_buf.name = "image.png"  # SDK uses .name to detect MIME type
+    try:
+        response = client.images.edit(
+            model="gpt-image-1",
+            image=image_file,
+            prompt=prompt,
+            n=1,
+            size="1024x1024",
+        )
+    except Exception as exc:
+        error_msg = str(exc)
+        raise RuntimeError(f"OpenAI image edit failed: {error_msg}") from exc
 
-    response = client.images.edit(
-        model="gpt-image-1",
-        image=png_buf,
-        prompt=prompt,
-        n=1,
-        size="1024x1024",
-    )
-
-    # gpt-image-1 returns base64, not a URL
+    # gpt-image-1 always returns b64_json
     b64_data = response.data[0].b64_json
+    if not b64_data:
+        raise RuntimeError("OpenAI response did not include image data.")
+
     return {
         "type": "image",
         "b64": f"data:image/png;base64,{b64_data}",

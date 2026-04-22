@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { AlignCenter, AlignLeft, AlignRight, Check, Trash2, Type, Copy, Palette } from 'lucide-react-native';
 import Slider from '@react-native-community/slider';
-import { ColorMatrix, type Matrix } from 'react-native-color-matrix-image-filters';
+import { ColorMatrix, type Matrix } from '@/src/lib/color-matrix-filters';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {

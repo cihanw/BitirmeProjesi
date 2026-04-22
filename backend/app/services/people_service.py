@@ -21,6 +21,7 @@ PEOPLE_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
 _LOCK = threading.Lock()
 FACE_MATCH_THRESHOLD = 0.40
 FACE_MATCH_THRESHOLD_SAME_IMAGE = 0.68
+MIN_PEOPLE_ALBUM_FACE_EDGE_PIXELS = 32.0
 FACE_CLUSTER_COLUMNS = (
     "id,user_id,name,centroid,sample_count,cover_image_uuid,cover_photo_id,updated_at"
 )
@@ -250,6 +251,19 @@ def _image_looks_human(image_row: dict[str, Any]) -> bool:
     return _image_has_face_evidence(image_row)
 
 
+def _detection_has_album_quality_face(detection: dict[str, Any]) -> bool:
+    bbox = detection.get("bounding_box")
+    if not isinstance(bbox, list) or len(bbox) != 4:
+        return False
+
+    try:
+        x1, y1, x2, y2 = [float(value) for value in bbox]
+    except (TypeError, ValueError):
+        return False
+
+    return min(x2 - x1, y2 - y1) >= MIN_PEOPLE_ALBUM_FACE_EDGE_PIXELS
+
+
 def assign_faces_to_clusters(
     *,
     user_id: str,
@@ -383,6 +397,9 @@ def _build_cluster_payload(
     seen_signatures: set[str] = set()
 
     for detection in ordered_detections:
+        if not _detection_has_album_quality_face(detection):
+            continue
+
         image_uuid = detection.get("image_uuid")
         image_row = image_rows.get(str(image_uuid), {})
         if image_row and not _image_looks_human(image_row):

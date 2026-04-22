@@ -1,8 +1,9 @@
 // src/app/_layout.tsx
 import { SplashScreen, Stack, usePathname, useRootNavigationState, useRouter, useSegments } from "expo-router";
 import { HeroUINativeProvider } from 'heroui-native';
-import { StyleSheet } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as MediaLibrary from 'expo-media-library';
 import '../../global.css';
 import '@/src/i18n/index';
 import { Uniwind } from "uniwind";
@@ -12,7 +13,7 @@ import { useAuthContext } from "../hooks/auth-hooks";
 import { useEffect, useRef, useState } from "react";
 import AuthProvider from "../providers/auth-provider";
 import { isSupabaseConfigured } from "@/lib/supabase";
-import { ensureLaunchSearchSync } from '@/src/lib/sync-service';
+import { cancelLaunchSearchSync, ensureLaunchSearchSync, syncNewLibraryPhotos } from '@/src/lib/sync-service';
 
 initMixpanel();
 Uniwind.setTheme('tagged-light');
@@ -27,14 +28,15 @@ function isAllowedPath(path: string) {
 }
 
 function RootLayoutNav() {
-  const { profile, isLoading, isLoggedIn } = useAuthContext();
+  const { session, profile, isLoading, isLoggedIn } = useAuthContext();
   const segments = useSegments();
   const pathname = usePathname();
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
   const [isNavigationReady, setIsNavigationReady] = useState(false);
   const hasBootstrappedNavigation = useRef(false);
-  const hasStartedLaunchSync = useRef(false);
+  const startedLaunchSyncKey = useRef<string | null>(null);
+  const appStateRef = useRef(AppState.currentState);
 
   useEffect(() => {
     if (isLoading || !rootNavigationState?.key) return;
@@ -105,20 +107,71 @@ function RootLayoutNav() {
   }, [isNavigationReady, isLoading, rootNavigationState?.key]);
 
   useEffect(() => {
-    if (hasStartedLaunchSync.current) return;
     if (isLoading || !rootNavigationState?.key) return;
-    if (isSupabaseConfigured && !isLoggedIn) return;
+    if (isSupabaseConfigured && !isLoggedIn) {
+      cancelLaunchSearchSync();
+      startedLaunchSyncKey.current = null;
+      return;
+    }
 
-    hasStartedLaunchSync.current = true;
+    const syncKey = isSupabaseConfigured ? session?.user.id : 'local';
+    if (!syncKey || startedLaunchSyncKey.current === syncKey) return;
 
-    ensureLaunchSearchSync()
+    startedLaunchSyncKey.current = syncKey;
+
+    ensureLaunchSearchSync(syncKey)
       .then((summary) => {
         console.log('Launch search sync summary:', summary);
       })
       .catch((error) => {
         console.warn('Launch search sync failed:', error);
       });
-  }, [isLoading, isLoggedIn, rootNavigationState?.key]);
+  }, [isLoading, isLoggedIn, rootNavigationState?.key, session?.user.id]);
+
+  useEffect(() => {
+    if (isLoading || !rootNavigationState?.key) return;
+    if (isSupabaseConfigured && !isLoggedIn) return;
+
+    const syncKey = isSupabaseConfigured ? session?.user.id : 'local';
+    if (!syncKey) return;
+
+    let syncInFlight: Promise<void> | null = null;
+
+    const runIncrementalSync = (insertedAssets?: MediaLibrary.Asset[]) => {
+      if (syncInFlight) return;
+
+      syncInFlight = syncNewLibraryPhotos(syncKey, insertedAssets)
+        .then((summary) => {
+          if (summary.queued > 0 || summary.failed > 0) {
+            console.log('New photo sync summary:', summary);
+          }
+        })
+        .catch((error) => {
+          console.warn('New photo sync failed:', error);
+        })
+        .finally(() => {
+          syncInFlight = null;
+        });
+    };
+
+    const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
+      const wasBackgrounded = /inactive|background/.test(appStateRef.current);
+      appStateRef.current = nextAppState;
+
+      if (wasBackgrounded && nextAppState === 'active') {
+        runIncrementalSync();
+      }
+    });
+
+    const mediaLibrarySubscription = MediaLibrary.addListener((event) => {
+      runIncrementalSync(event.insertedAssets);
+    });
+
+    return () => {
+      appStateSubscription.remove();
+      mediaLibrarySubscription.remove();
+    };
+  }, [isLoading, isLoggedIn, rootNavigationState?.key, session?.user.id]);
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

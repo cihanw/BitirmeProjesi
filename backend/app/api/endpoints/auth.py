@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.db.supabase import get_supabase
 from app.core.security import DEV_LOCAL_USER_ID, security, verify_jwt
+from app.api.endpoints.upload import mark_user_uploads_cancelled
 from app.services.search_service import SearchService
 
 router = APIRouter()
@@ -87,6 +88,8 @@ def delete_account(
     except Exception as config_error:
         raise HTTPException(status_code=503, detail=f"Supabase unavailable: {config_error}")
 
+    cancelled_uploads = mark_user_uploads_cancelled(user_id)
+
     try:
         cleanup_summary = SearchService().clear_user_index_data(user_id=user_id, strict=True)
     except Exception as cleanup_error:
@@ -117,6 +120,7 @@ def delete_account(
                 **cleanup_summary.get("supabase", {}),
                 "profiles_deleted": profiles_deleted,
             },
+            "pending_uploads_cancelled": cancelled_uploads,
             "auth_user_deleted": True,
         },
     }

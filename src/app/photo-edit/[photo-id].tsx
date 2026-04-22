@@ -40,7 +40,7 @@ import {
     saturate as saturateMatrix,
     temperature as temperatureMatrix,
     tint as tintMatrix,
-} from 'react-native-color-matrix-image-filters';
+} from '@/src/lib/color-matrix-filters';
 
 import { getPickedAsset } from '@/src/lib/local-sync-store';
 import { getAssetById, type AssetInfo } from '@/src/lib/media-library';

@@ -3,6 +3,7 @@ import { Image as RNImage, View, ScrollView, Text, TouchableOpacity } from 'reac
 import { TextField, Button, FormField, Checkbox } from 'heroui-native';
 import { supabase } from '@/lib/supabase';
 import { useRouter, Link } from 'expo-router';
+import * as Linking from 'expo-linking';
 import PageProvider from '@/src/components/page-provider';
 import { ChevronLeft } from 'lucide-react-native';
 import { goBackOrReplace } from '@/src/lib/navigation';
@@ -69,6 +70,9 @@ export default function RegisterScreen() {
             const { data, error: signUpError } = await supabase.auth.signUp({
                 email: normalizedEmail,
                 password,
+                options: {
+                    emailRedirectTo: Linking.createURL('/login'),
+                },
             });
 
             if (signUpError) {

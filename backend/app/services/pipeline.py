@@ -1,6 +1,7 @@
 import os
 import time
 import hashlib
+from collections.abc import Callable
 
 from app.services.embedding_service import generate_image_embedding
 from app.services.local_index_store import save_index_record
@@ -23,6 +24,8 @@ def process_image(
     photo_id: str,
     image_uuid: str,
     captured_at: str | None = None,
+    *,
+    is_cancelled: Callable[[], bool] | None = None,
 ):
     """
     Background task pipeline.
@@ -30,6 +33,22 @@ def process_image(
     persistence -> cleanup.
     """
     supabase = None
+
+    def cancellation_requested(stage: str) -> bool:
+        if not is_cancelled:
+            return False
+
+        try:
+            cancelled = is_cancelled()
+        except Exception as cancel_error:
+            print(f"[{photo_id}] Cancellation check failed at {stage}: {cancel_error}")
+            return False
+
+        if cancelled:
+            print(f"[{photo_id}] Pipeline cancelled at {stage}; skipping persistence.")
+            return True
+
+        return False
 
     try:
         from app.db.supabase import get_supabase
@@ -39,6 +58,9 @@ def process_image(
         print(f"[{photo_id}] Supabase unavailable, using local-only persistence: {config_error}")
 
     try:
+        if cancellation_requested("start"):
+            return
+
         pipeline_started_at = time.perf_counter()
         content_hash = build_content_hash(image_path)
         faces: list[dict[str, object]] = []
@@ -48,6 +70,9 @@ def process_image(
         embedding_started_at = time.perf_counter()
         embedding = generate_image_embedding(image_path)
         print(f"[{photo_id}] Image embedding completed in {time.perf_counter() - embedding_started_at:.2f}s")
+
+        if cancellation_requested("after image embedding"):
+            return
 
         try:
             from app.services.face_service import detect_and_encode_faces_with_attempt as detect_faces_with_attempt
@@ -70,6 +95,9 @@ def process_image(
 
         if not faces:
             print(f"[{photo_id}] Face detection found 0 faces; no fallback pass configured")
+
+        if cancellation_requested("before clustering"):
+            return
 
         face_records, cluster_records = assign_faces_to_clusters(
             user_id=user_id,
@@ -116,6 +144,9 @@ def process_image(
             "persons": detected_persons,
             "captured_at": captured_at,
         }
+
+        if cancellation_requested("before persistence"):
+            return
 
         print(f"[{photo_id}] Saving local dev index...")
         save_index_record(record)

@@ -7,13 +7,14 @@ import { Bolt, Info, ListCheck, LogOut, Star, Trash, UserRoundPen } from "lucide
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { trackEvent } from "@/src/mixpanel";
-import { supabase } from "@/lib/supabase";
+import { clearSupabaseAuthStorage, supabase } from "@/lib/supabase";
 import { useAuthContext } from "@/src/hooks/auth-hooks";
 import { goBackOrReplace } from "@/src/lib/navigation";
 import { deleteCurrentAccount } from "@/src/lib/api/auth";
 import { clearSyncMap } from "@/src/lib/local-sync-store";
 import { clearRecentSearchQueries } from "@/src/lib/search-history";
 import { clearSavedLibraryAssets } from "@/src/lib/saved-assets-store";
+import { cancelLaunchSearchSync } from "@/src/lib/sync-service";
 
 export default function Profile() {
     const { profile } = useAuthContext();
@@ -38,13 +39,18 @@ export default function Profile() {
         setIsDeletingAccount(true);
 
         try {
+            cancelLaunchSearchSync();
             await deleteCurrentAccount();
             await Promise.allSettled([
                 clearSyncMap(),
                 clearRecentSearchQueries(),
                 clearSavedLibraryAssets(),
             ]);
-            await supabase.auth.signOut();
+            const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+            if (signOutError) {
+                console.warn("Local sign out after account deletion failed:", signOutError);
+                await clearSupabaseAuthStorage();
+            }
             router.replace("/");
         } catch (error) {
             console.error("Error deleting account:", error);
@@ -80,6 +86,7 @@ export default function Profile() {
 
     const logout = async () => {
         trackEvent("go_to_logout_from_profile");
+        cancelLaunchSearchSync();
         const { error } = await supabase.auth.signOut();
         if (error) {
             console.error("Error logging out:", error);
